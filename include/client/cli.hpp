@@ -33,6 +33,7 @@ class chatclient{
     void connect_init();
     void caidan();
     void deal_login_mu(char *a);
+    void find_password(std::string chose);
     void deal_else_gn();
 
     void delete_friends(int client_fd);
@@ -182,6 +183,7 @@ void chatclient::caidan(){
     std::cout<<"        |      2.注册        |      "<<std::endl;
     std::cout<<"        |      3.注销        |      "<<std::endl;
     std::cout<<"        |      4.退出        |      "<<std::endl;
+    std::cout<<"        |      5.找回密码    |       "<<std::endl;
     std::cout<<"        ---------------------       "<<std::endl;
     std::thread allrecv([&]{
         auto&client=clientmes[client_fd];
@@ -323,7 +325,7 @@ void chatclient::caidan(){
             }
             continue;
         }
-        if(tempc>=1&&tempc<=4){
+        if(tempc>=1&&tempc<=5){
             break;
         }else{
             fail_times++;
@@ -342,11 +344,58 @@ void chatclient::caidan(){
         std::cout<<"已退出客户端"<<std::endl;
         exit(0);
     }
-    if(choose[0]!='1'&&choose[0]!='2'&&choose[0]!='3'){
-        std::cout<<"无效命令，请重新输入"<<std::endl;
+    if(choose[0]=='5'){
+        find_password(choose);
+        return;
+    }else{
+        Send(client_fd,choose,strlen(choose),0);
     }
-    Send(client_fd,choose,strlen(choose),0);
     deal_login_mu(choose);
+}
+
+void chatclient::find_password(std::string chose){
+    std::cout<<"请输入你想要找回密码的账号:";
+    std::string account;
+    std::getline(std::cin,account);
+    int failtimes=0;
+    while(account.size()!=6||!std::all_of(account.begin(),account.end(),::isdigit)){
+        if(failtimes==3){
+            std::cout<<"错误次数过多请稍后重试"<<std::endl;
+            return;
+        }
+        std::cout<<"账号格式不规范请重新输入:";
+        failtimes++;
+        std::getline(std::cin,account);
+    }
+    std::cout<<"请输入你的qq号:";
+    std::string email;
+    std::getline(std::cin,email);
+    failtimes=0;
+    while(email.size()!=10||!std::all_of(account.begin(),account.end(),::isdigit)){
+        if(failtimes==3){
+            std::cout<<"错误次数过多请稍后重试"<<std::endl;
+            return;
+        }
+        std::cout<<"账号格式不规范请重新输入:";
+        failtimes++;
+        std::getline(std::cin,account);
+    }
+    email+="@qq.com";
+    std::string allmes="5 "+account+" "+email;
+    int n=Send(client_fd,allmes.c_str(),allmes.size(),0);
+    while(!if_finshmes){
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    if_finshmes=false;
+    std::cout<<"请输入验证码:";
+    std::string check_mes;
+    std::getline(std::cin,check_mes);
+    check_mes.insert(0,"yzm check mes");
+    Send(client_fd,check_mes.c_str(),check_mes.size(),0);
+    while(!if_finshmes){
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    if_finshmes=false;
 }
 
 void chatclient::deal_login_mu(char *a){
@@ -887,8 +936,6 @@ void chatclient::groups_chat(int client_fd,int choose){
         
         int opt=1;
         int reuse_fd=setsockopt(group_chatfd,SOL_SOCKET,SO_REUSEADDR,&opt,sizeof(int));
-        // int recvBufSize = 8 * 1024 * 1024; // 8MB
-        // setsockopt(group_chatfd, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
 
         if(reuse_fd<0){
             perror("reuse setsockopt");

@@ -47,6 +47,7 @@ class chatserver{
     void deal_epoll_event();
     void deal_friends_part(int client_fd,std::string data);
     void deal_login_in(int client_fd);
+    void find_password(int client_fd,std::string mes);
     std::string deal_add_friends(int client_fd,std::string account);
     void deal_friends_add_hf(int client_fd, const std::string& response, const std::string& requester,std::string own_account);
     void delete_friends(int client_fd,std::string account);
@@ -227,6 +228,10 @@ void chatserver::deal_client_mes(int client_fd){
             temp.erase(i,1);
         }
     }    
+    if(temp.find("yzm check mes")!=std::string::npos){
+        find_password(client_fd,temp);
+        return;
+    }
     if(temp.size()>0){
         if(temp.find("head")!=std::string::npos&&temp.find("ghead")==std::string::npos){
             std::mutex recv_lcok;
@@ -282,28 +287,32 @@ void chatserver::deal_client_mes(int client_fd){
     }
     
     if(client.state==0){
-        if(client.login_step==0){
-            client.mark=buf[0];
-            client.login_step=1;
-        }else if(client.login_step==1){
-            client.zh=temp.substr(temp.find("(zh)")+4,6);
-            client.login_step=2;
-        }else if(client.login_step==2){
-            int pos1=temp.find("(mm)");
-            int pos2=temp.find("(MM)");
-            client.mm=temp.substr(pos1+4,pos2-pos1-4);
-            if(client.mark[0]=='2'){
-                client.login_step=3;
-            }else{
+        if(temp[0]=='5'){
+            find_password(client_fd,temp);
+        }else{
+            if(client.login_step==0){
+                client.mark=buf[0];
+                client.login_step=1;
+            }else if(client.login_step==1){
+                client.zh=temp.substr(temp.find("(zh)")+4,6);
+                client.login_step=2;
+            }else if(client.login_step==2){
+                int pos1=temp.find("(mm)");
+                int pos2=temp.find("(MM)");
+                client.mm=temp.substr(pos1+4,pos2-pos1-4);
+                if(client.mark[0]=='2'){
+                    client.login_step=3;
+                }else{
+                    deal_login_in(client_fd);
+                    client.login_step=0;
+                }
+            }else if(client.login_step==3){
+                int pos1=temp.find("(name)");
+                int pos2=temp.find("(NAME)");
+                client.name=temp.substr(pos1+6,pos2-pos1-6);
                 deal_login_in(client_fd);
                 client.login_step=0;
             }
-        }else if(client.login_step==3){
-            int pos1=temp.find("(name)");
-            int pos2=temp.find("(NAME)");
-            client.name=temp.substr(pos1+6,pos2-pos1-6);
-            deal_login_in(client_fd);
-            client.login_step=0;
         }
     }else{
         std::string key="new message:messages";
@@ -358,7 +367,6 @@ void chatserver::deal_client_mes(int client_fd){
         std::unique_lock<std::mutex> bufflock(recv_lock);
         for(auto&i:recv_buffer){
             if(recv_buffer.empty()) break;
-
             if(client.if_begin_chat==1&&!client.chat_with.empty()&&recv_buffer.front().find("list file")==std::string::npos
             &&recv_buffer.front().find("look past")==std::string::npos){
                 chat_with_friends(client_fd,client.chat_with,recv_buffer.front());
@@ -372,6 +380,80 @@ void chatserver::deal_client_mes(int client_fd){
             recv_buffer.pop_front();
         }
         bufflock.unlock();
+    }
+}
+
+void chatserver::find_password(int client_fd,std::string mes){
+    static std::string code;
+    static std::string account;
+    if(mes.find("yzm")==std::string::npos){
+        account=mes.substr(2,6);
+        std::string email=mes.substr(9,mes.size()-9);
+        std::cout<<"account="<<account<<std::endl;
+        std::cout<<"email="<<email<<std::endl;
+
+        srand(time(nullptr));
+        for(int i=0;i<6;i++){
+            code += '0' + rand() % 10;
+        }
+        std::string recipient=email;
+        std::string sender="3076331747@qq.com";
+        std::string subject = "验证码";
+
+        std::string cmd =
+        "(echo \"From: " + sender + "\";"
+        "echo \"To: " + recipient + "\";"
+        "echo \"Subject: " + subject + "\";"
+        "echo \"Date: $(date -R)\";"
+        "echo \"MIME-Version: 1.0\";"
+        "echo \"Content-Type: text/plain; charset=UTF-8\";"
+        "echo \"Content-Transfer-Encoding: 8bit\";"
+        "echo \"\";"
+        "echo \"尊敬的用户，\";"
+        "echo \"\";"
+        "echo \"我们收到了您在聊天室系统中提交的账号安全验证请求。\";"
+        "echo \"为了确保是您本人操作，请使用以下动态安全码完成身份验证：\";"
+        "echo \"\";"
+        "echo \"【" + code + "】\";"
+        "echo \"\";"
+        "echo \"此动态安全码仅在 5 分钟内有效，请尽快在系统中输入。\";"
+        "echo \"如果您并未发起请求，请忽略本邮件。\";"
+        "echo \"\";"
+        "echo \"为了保障您的账号安全，请不要将此动态安全码透露给任何人。\";"
+        "echo \"\";"
+        " | msmtp --account=default " + recipient;
+
+
+
+        int ret = system(cmd.c_str());
+        std::string msg="验证码已发送";
+        if(ret!=0){
+            msg="验证码发送失败";
+        }
+        Send(client_fd,msg.c_str(),msg.size(),0);
+    }else{
+        std::string response;
+        int pos=mes.find("mes");
+        if(pos==-1||pos+9<mes.size()){
+            response="验证码错误";
+        }else{
+            std::string checkcode=mes.substr(pos+3,6);
+            if(checkcode!=code){
+                response="验证码错误";
+            }else{
+                std::string password_key="user:"+account;
+                redisReply *getpassword=(redisReply *)redisCommand(conn,"HGET %s password",password_key.c_str());
+                std::string password=getpassword->str;
+                freeReplyObject(getpassword);
+                password.insert(0,"你的密码为:");
+                Send(client_fd,password.c_str(),password.size(),0);
+            }
+        }
+        if(!response.empty()&&response=="验证码错误"){
+            Send(client_fd,response.c_str(),response.size(),0);
+        }
+        code.clear();
+        account.clear();
     }
 }
 
