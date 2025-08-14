@@ -308,6 +308,9 @@ void chatclient::caidan(){
         }
     });
     allrecv.detach();
+    if(client_fd==-1) {
+        exit(0);
+    }
     char choose[10];
     memset(choose,'\0',sizeof(10));
     int tempc=0;
@@ -911,7 +914,7 @@ void chatclient::groups_chat(int client_fd,int choose){
     static int group_chatfd=-1;
     if(client.if_begin_group_chat==1&&group_chatfd==-1){
         std::cout<<"/gexit 可退出群聊"<<std::endl;
-        std::cout<<"list file列出可下载的文件"<<std::endl;
+        std::cout<<"glist file列出可下载的文件"<<std::endl;
         std::cout<<"glook past查看群聊所有的历史记录"<<std::endl;
         std::cout<<"STOR + 文件 上传文件"<<std::endl;
         std::cout<<"RETR + 文件 下载文件"<<std::endl;
@@ -1033,6 +1036,7 @@ void chatclient::groups_chat(int client_fd,int choose){
                     client.fptc.start(message,client.ip);
                 }
                 if(message.substr(0,6)=="/gexit"){
+                    
                     gsend_chat=false;
                     grecv_chat=false;
                     client.if_begin_group_chat=0;
@@ -1060,6 +1064,7 @@ void chatclient::groups_chat(int client_fd,int choose){
                 close(group_chatfd);
             }
             std::cout<<"已成功退出群聊聊天"<<std::endl;
+            group_chatfd=-1;
             client.if_begin_group_chat=0;
             gsend_chat=true;
             grecv_chat=true;

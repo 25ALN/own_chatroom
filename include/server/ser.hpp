@@ -241,7 +241,7 @@ void chatserver::deal_client_mes(int client_fd){
                 int pos2=temp.find('d');
                 if(pos2-pos1+temp.find("head")+4>temp.size()||pos2==-1||pos1==-1) break;
                 std::string len=temp.substr(temp.find("head")+4,pos1-pos2-1);
-                std::cout<<"len size="<<len.size()<<std::endl;
+                if(len.find('\r')!=std::string::npos||len.find('\n')!=std::string::npos||len.empty()||len.find(' ')!=std::string::npos) break;
                 int meslen=std::stoi(len);
                 if(meslen+4+len.size()>temp.size()) break;
                 std::string tempmes=temp.substr(pos1+1,meslen);
@@ -265,6 +265,7 @@ void chatserver::deal_client_mes(int client_fd){
                 if(pos1==-1||pos2==-1) break;
                 if(pos2-pos1+temp.find("ghead")+5>temp.size()) break;
                 std::string len=temp.substr(temp.find("ghead")+5,pos1-pos2-1);
+                 if(len.find('\r')!=std::string::npos||len.find('\n')!=std::string::npos||len.empty()||len.find(' ')!=std::string::npos) break;
                 int meslen=std::stoi(len);
                 if(meslen+5+len.size()>temp.size()) break;
                 std::string tempmes=temp.substr(pos1+1,meslen);
@@ -294,11 +295,13 @@ void chatserver::deal_client_mes(int client_fd){
                 client.mark=buf[0];
                 client.login_step=1;
             }else if(client.login_step==1){
+                if(temp.find("zh")==std::string::npos) return;
                 client.zh=temp.substr(temp.find("(zh)")+4,6);
                 client.login_step=2;
             }else if(client.login_step==2){
                 int pos1=temp.find("(mm)");
                 int pos2=temp.find("(MM)");
+                if(pos1==-1||pos2==-1) return;
                 client.mm=temp.substr(pos1+4,pos2-pos1-4);
                 if(client.mark[0]=='2'){
                     client.login_step=3;
@@ -309,6 +312,7 @@ void chatserver::deal_client_mes(int client_fd){
             }else if(client.login_step==3){
                 int pos1=temp.find("(name)");
                 int pos2=temp.find("(NAME)");
+                if(pos1==-1||pos2==-1) return;
                 client.name=temp.substr(pos1+6,pos2-pos1-6);
                 deal_login_in(client_fd);
                 client.login_step=0;
@@ -420,9 +424,7 @@ void chatserver::find_password(int client_fd,std::string mes){
         "echo \"如果您并未发起请求，请忽略本邮件。\";"
         "echo \"\";"
         "echo \"为了保障您的账号安全，请不要将此动态安全码透露给任何人。\";"
-        "echo \"\";"
-        " | msmtp --account=default " + recipient;
-
+        "echo \"\") | msmtp --account=default " + recipient;
 
 
         int ret = system(cmd.c_str());
@@ -810,7 +812,7 @@ void chatserver::deal_friends_part(int client_fd,std::string data){
             allfile="当前还没有可下载的文件";
         }
         Send(client_fd,allfile.c_str(),allfile.size(),0);
-    }else if(data=="list file$?123456^!"){
+    }else if(data.find("glist file$?")!=std::string::npos){
         std::string path="/home/aln/桌面/chatroom/downlode/groupfile";
         std::string allfile;
         for (const auto &entry :std::filesystem::directory_iterator(path)) {
@@ -1075,8 +1077,14 @@ void chatserver::disband_groups(int client_fd){
             }
             freeReplyObject(deljoin);
             for(auto&[fd,a]:clientm){
+                if(account==client.cur_user) break;
                 if(a.cur_user==account){
-                    Send(fd,group_num.c_str(),group_num.size(),0);
+                    if(a.if_begin_group_chat==1){
+                        mes+="请输入/gexit退出群聊";
+                        Send(fd,mes.c_str(),mes.size(),0);
+                    }else{
+                        Send(fd,mes.c_str(),mes.size(),0);
+                    }
                     online=1;
                     break;
                 }
@@ -1287,6 +1295,8 @@ void chatserver::groups_chat(int client_fd){
             close(groups_chatfd);
             return;
         }
+        int size = 1024 * 1024; // 1MB
+        setsockopt(groups_chatfd, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
 
         std::string gb_addr="239.";
         long long getaddr=std::stoll(group_number);
@@ -1324,9 +1334,9 @@ void chatserver::groups_chat(int client_fd){
         tempmes+="$?"+account+"^!";
         tempmes+=0x02;
         std::string g_key="group:"+client.group_chat_num;
-        static std::mutex savemeslock;
-        std::unique_lock<std::mutex> saveLock(savemeslock);
+        std::mutex savemeslock;
         {
+            std::unique_lock<std::mutex> saveLock(savemeslock);
             redisReply *greply=(redisReply *)redisCommand(conn,"EXISTS %s",g_key.c_str());
             if(greply->integer!=1){
                 tempmes="该群已被解散，不允许继续发送消息";
@@ -1334,15 +1344,16 @@ void chatserver::groups_chat(int client_fd){
                 client.group_message.clear();
                 client.group_chat_num.clear();
                 message.clear();
-
+                
                 recv_buffer.clear();
                 tempmes+=0x02;
+                groups_chatfd=-1;
+                memset(&dbaddr,0,sizeof(dbaddr));
             }
             freeReplyObject(greply);
-        //saveLock.unlock();
         }
-        int n=sendto(groups_chatfd,tempmes.c_str(),tempmes.size(),0,(struct sockaddr*)&dbaddr,sizeof(dbaddr));
         
+        int n=sendto(groups_chatfd,tempmes.c_str(),tempmes.size(),0,(struct sockaddr*)&dbaddr,sizeof(dbaddr));
         if(tempmes.find("解散")==std::string::npos){
             std::string mes=client.group_chat_num+"群中有新消息";
             mes+=0x07;
@@ -1701,8 +1712,21 @@ void chatserver::own_charger_right(int client_fd){
         std::string group_number=client.group_message.substr(pos1+1,pos2-pos1-1);
         int mark=check_acount_ifexists(client_fd,account,group_number);
         std::cout<<"       many mark="<<mark<<std::endl;
+        
         if(mark==4||mark==5){
             if(choose=="1"){
+                std::string checkagain="own"+client.cur_user;
+                int check=check_acount_ifexists(client_fd,checkagain,group_number);
+                if(check!=5&&check!=6){
+                    std::cout<<"check="<<check<<std::endl;
+                    std::string msg="你已不再是管理员，操作无效";
+                    Send(client_fd,msg.c_str(),msg.size(),0);
+                    client.if_check_identity=0;
+                    client.group_message.clear();
+                    return;
+                }
+                
+
                 std::string member_key=group_number+":member";
                 redisReply *reply=(redisReply *)redisCommand(conn,"SMEMBERS %s",member_key.c_str());
                 for(int i=0;i<reply->elements;i++){
@@ -1828,7 +1852,7 @@ void chatserver::own_charger_right(int client_fd){
         }else{
             if(mark==-1){
                 response="不允许对自己进行操作";
-            }else if(mark==0){
+            }else if(mark==1){
                 response="该账号不存在";
             }else if(mark==2){
                 response="该群聊账号不存在";
@@ -1844,7 +1868,7 @@ void chatserver::own_charger_right(int client_fd){
     client.group_message.clear();
 }
 
-void chatserver::la_people_in_group(int client_fd){
+void chatserver:: la_people_in_group(int client_fd){
     auto&client=clientm[client_fd];
     std::cout<<"group la mes="<<client.group_message<<" size="<<client.group_message.size()<<std::endl;
     if(client.group_message.empty()){ 
@@ -1909,7 +1933,6 @@ void chatserver::la_people_in_group(int client_fd){
             if(a.cur_user==account){
                 online=1;
                 int n=Send(fd,message.c_str(),message.size(),0);
-                std::cout<<"has send online n="<<n<<std::endl;
                 break;
             }
         }
@@ -1956,6 +1979,11 @@ void chatserver::agree_enter_group(int client_fd){
 
 int chatserver::check_acount_ifexists(int client_fd,std::string acout,std::string group_num){
     auto&client=clientm[client_fd];
+    int specail=0;
+    if(acout.substr(0,3)=="own"){
+        specail=1;
+        acout.erase(0,3);
+    }
     std::string user_key="user:"+acout;
     int mark=0;
     //账号存在验证
@@ -1967,9 +1995,11 @@ int chatserver::check_acount_ifexists(int client_fd,std::string acout,std::strin
     freeReplyObject(reply);
     if(mark!=0) return mark;
     //验证是否操作的账号为自己
-    if(client.cur_user==acout){
-        std::cout<<"不能对自己进行操作"<<std::endl;
-        return -1;
+    if(specail==0){
+        if(client.cur_user==acout){
+            std::cout<<"不能对自己进行操作"<<std::endl;
+            return -1;
+        }
     }
     //群聊账号存在验证
     std::string group_key="group:"+group_num;
@@ -2448,8 +2478,12 @@ int Send(int fd, const char *buf, int len, int flags){
     while(reallen<len){
         int temp=send(fd,buf+reallen,len-reallen,flags);
         if(temp<0){
-            perror("send");
-            close(fd);
+            if(errno==EAGAIN||errno==EWOULDBLOCK){
+                break;
+            }else{
+                perror("send");
+                close(fd);
+            }
         }else if(temp==0){
             //数据已全部发送完毕
             break;

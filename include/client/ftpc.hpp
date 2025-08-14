@@ -249,6 +249,7 @@ void ftpclient::deal_get_file(std::string filename,int fd){
     shutdown(data_fd, SHUT_RDWR);
     close(data_fd);
     fclose(fp);
+    mark=1;
 }
 
 void ftpclient::deal_up_file(std::string filename, int control_fd)

@@ -157,10 +157,17 @@ void ftpserver::deal_client_data(int data_fd){
         deal_pasv_data(data_fd);
     }else if(command.find("STOR")!=std::string::npos){
         std::cout<<"begin STOR"<<std::endl;
-        deal_STOR_data(client,command); //从第六个字节开始读取文件名称
+        std::thread x([this,client,command]{
+            deal_STOR_data(client,command);
+        });
+        x.detach();
+        //deal_STOR_data(client,command); //从第六个字节开始读取文件名称
     }else if(command.find("RETR")!=std::string::npos){
         std::cout<<"begin RETR"<<std::endl;
-        deal_RETR_data(client,command);
+        std::thread x([this,client,command]{
+            deal_RETR_data(client,command);
+        });
+        x.detach();
     }else if(command.find("quit")!=std::string::npos){
         return;
     }

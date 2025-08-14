@@ -11,7 +11,7 @@ class login_re_zhuxiao{
 int login_re_zhuxiao::check_account(redisContext* conn,const char* account,const char* password,const char *name){
     std::string key="user:"+std::string(account);
     // 检查账号是否已存在
-    redisReply* check_reply = (redisReply*)redisCommand(conn,"EXISTS %s", account);
+    redisReply* check_reply = (redisReply*)redisCommand(conn,"EXISTS %s",key.c_str());
     if (check_reply->integer==1) {
         std::cout<<"账号"<<account<<"已存在，无法注册"<<std::endl;
         freeReplyObject(check_reply);
