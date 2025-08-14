@@ -94,9 +94,9 @@ void chatserver::heart_check(){
         perror("setsockopt alive");
     }
     while(true){
-        sleep(10); //每10秒检查一次
+        sleep(20); //每10秒检查一次
         time_t now=time(nullptr);
-        const time_t overtime=15; //超时时间
+        const time_t overtime=15; //超时时间s
         std::vector<int> to_remove;
         
         for (auto &[fd, client] : clientm) {
@@ -203,7 +203,7 @@ void chatserver::connect_init(){
 
 void chatserver::deal_client_mes(int client_fd){
     
-    char buf[1000000];
+    char buf[2000000];
     memset(buf,'\0',sizeof(buf));
     auto &client=clientm[client_fd];
     int n=Recv(client_fd,buf,sizeof(buf),0);
@@ -216,7 +216,8 @@ void chatserver::deal_client_mes(int client_fd){
     }
     if(n<0){
         if(errno==EAGAIN||errno==EWOULDBLOCK){
-            // 连接关闭或暂时无数据
+            return;
+        }else{
             close(client_fd);
             clientm.erase(client_fd);
         }
@@ -1295,7 +1296,7 @@ void chatserver::groups_chat(int client_fd){
             close(groups_chatfd);
             return;
         }
-        int size = 1024 * 1024; // 1MB
+        int size = 2048*2048;
         setsockopt(groups_chatfd, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
 
         std::string gb_addr="239.";
@@ -1352,7 +1353,6 @@ void chatserver::groups_chat(int client_fd){
             }
             freeReplyObject(greply);
         }
-        
         int n=sendto(groups_chatfd,tempmes.c_str(),tempmes.size(),0,(struct sockaddr*)&dbaddr,sizeof(dbaddr));
         if(tempmes.find("解散")==std::string::npos){
             std::string mes=client.group_chat_num+"群中有新消息";
@@ -1392,8 +1392,13 @@ void chatserver::groups_chat(int client_fd){
         }
         std::cout<<"had send n:"<<n<<std::endl;
         if(n<0){
-            perror("sendto");
-            close(groups_chatfd);
+            if(errno!=EAGAIN&&errno!=EWOULDBLOCK){
+                perror("sendto");
+                close(groups_chatfd);
+            }else{
+                client.group_message.clear();
+                return;
+            }
         }
         client.group_message.clear();
     }
@@ -2200,6 +2205,7 @@ void chatserver::chat_with_friends(int client_fd,std::string account,std::string
                     }else if(mark_specail==2){
                         willsendmes="你已被对方删除，无法继续发送消息";
                     }
+                    willsendmes+=0x07;
                     recv_buffer.clear();
                     std::string delmes=willsendmes+" ("+client.cur_user+")0x01";
                     if(client.if_begin_chat==1){
@@ -2294,6 +2300,14 @@ void chatserver::delete_friends(int client_fd,std::string account){
                         std::string hmd_key=client.cur_user+":hmd_account";
                         redisReply *delhmd=(redisReply *)redisCommand(conn,"DEL %s",hmd_key.c_str());
                         freeReplyObject(delhmd);
+                        for(auto&[fd,a]:clientm){
+                            if(a.cur_user==account&&a.if_begin_chat==1){
+                                std::string mes="你已被对方删除请输入/exit后退出私聊";
+                                mes+=0x07;
+                                Send(fd,mes.c_str(),mes.size(),0);
+                                break;
+                            }
+                        }
                     }else{
                         response="删除失败，出现异常错误";
                     }
@@ -2481,7 +2495,7 @@ int Send(int fd, const char *buf, int len, int flags){
             if(errno==EAGAIN||errno==EWOULDBLOCK){
                 break;
             }else{
-                perror("send");
+                perror("normal send");
                 close(fd);
             }
         }else if(temp==0){

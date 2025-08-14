@@ -200,7 +200,7 @@ void chatclient::caidan(){
                     close(client_fd);
                     client_fd=-1;
                     if_login=false;
-                    exit(0);
+                    break;
                 }
                 if(n==0) continue;
                 std::string temp=buf;
@@ -214,8 +214,8 @@ void chatclient::caidan(){
                 if(temp[0]==0x06||temp.size()<=0){
                     continue;
                 }
-                if((temp.find("好友请求")!=std::string::npos&&temp.find(client.own_account)!=std::string::npos)
-                ||temp.find("请求加入")!=std::string::npos){
+                if((temp.find("[好友请求")!=std::string::npos&&temp.find(client.own_account)!=std::string::npos)
+                ||temp.find("请求加入群聊")!=std::string::npos){
                     int pos=temp.find("(");
                     temp=temp.substr(0,pos);
                     recv_message.insert(temp);
@@ -240,7 +240,7 @@ void chatclient::caidan(){
                         client.reafy_return=1;
                     }
                
-                    if(temp.find(client.own_account)!=std::string::npos&&temp.find("0x01")!=std::string::npos){
+                    if(temp.find(client.own_account)!=std::string::npos&&temp.find("0x01")!=std::string::npos&&temp.find("无法继续发送消息")!=std::string::npos){
                         if(temp.find("无法继续发送")!=std::string::npos){
                             send_chatting=false;
                             client.if_getchat_account=0;
@@ -250,7 +250,8 @@ void chatclient::caidan(){
                             int pos2=temp.find(")0x01");
                             std::string ownmes=temp.substr(0,pos2-7);
                             std::cout<<ownmes<<std::endl;
-                            temp.erase(0,pos2+5);
+                            temp.clear();
+                            break;
                         }
                         continue;
                     }
@@ -475,6 +476,8 @@ void chatclient::deal_else_gn(){
                     break;
                 }else if(!recv_message.empty()&&recv_message.size()!=0&&mesmark==false&&(client.if_enter_group==1
                 ||client.begin_chat_mark==1)){
+                    std::cout<<"own mark="<<client.begin_chat_mark<<std::endl;
+                    std::cout<<"group mark="<<client.if_enter_group<<std::endl;
                     std::cout<<"收到新消息请稍后退出后查看"<<std::endl;
                     //mesmark=true; 
                     break;
@@ -521,7 +524,7 @@ void chatclient::deal_else_gn(){
     strcpy(choose,temp.data());
     int n=Send(client_fd,choose,1,0);
     if(n<=0){
-        perror("send");
+        perror("deal else send");
         close(client_fd);
     }
     if(choose[0]=='7'){
@@ -961,7 +964,7 @@ void chatclient::groups_chat(int client_fd,int choose){
 
         std::thread recv_thread([&]{
             while(grecv_chat){
-                char gbuf[5000000];
+                char gbuf[3000000];
                 memset(gbuf,'\0',sizeof(gbuf));
                 int n=Recv(group_chatfd,gbuf,sizeof(gbuf),0);
                 if(n<0){
@@ -1070,6 +1073,7 @@ void chatclient::groups_chat(int client_fd,int choose){
             grecv_chat=true;
         }
     }else{
+        client.if_enter_group=0;
         return;
     }
 }
@@ -1146,6 +1150,7 @@ void chatclient::owner_charger_right(int client_fd,int choose){
     }
     if(chose=="4"){
         client.identify_pd=0;
+        client.if_enter_group=0;
         return;
     }
     std::cout<<"请输入你想操作的群聊的群号(9位):";
