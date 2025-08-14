@@ -248,10 +248,10 @@ void chatclient::caidan(){
                         }
                         while(!temp.empty()){
                             int pos2=temp.find(")0x01");
+                            if(pos2==-1||pos2-7>temp.size()) break;
                             std::string ownmes=temp.substr(0,pos2-7);
                             std::cout<<ownmes<<std::endl;
-                            temp.clear();
-                            break;
+                            temp.erase(0,pos2+5);
                         }
                         continue;
                     }

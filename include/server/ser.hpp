@@ -2205,11 +2205,13 @@ void chatserver::chat_with_friends(int client_fd,std::string account,std::string
                     }else if(mark_specail==2){
                         willsendmes="你已被对方删除，无法继续发送消息";
                     }
-                    willsendmes+=0x07;
                     recv_buffer.clear();
                     std::string delmes=willsendmes+" ("+client.cur_user+")0x01";
                     if(client.if_begin_chat==1){
-                        Send(client_fd,delmes.c_str(),delmes.size(),0);
+                        int n=Send(client_fd,delmes.c_str(),delmes.size(),0);
+                        if(n<0){
+                            std::cout<<"message="<<delmes<<std::endl;
+                        }
                     }
                     client.if_begin_chat=0;
                 }
@@ -2497,6 +2499,7 @@ int Send(int fd, const char *buf, int len, int flags){
             }else{
                 perror("normal send");
                 close(fd);
+                break;
             }
         }else if(temp==0){
             //数据已全部发送完毕
