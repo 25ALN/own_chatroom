@@ -248,7 +248,10 @@ void chatclient::caidan(){
                         }
                         while(!temp.empty()){
                             int pos2=temp.find(")0x01");
-                            if(pos2==-1||pos2-7>temp.size()) break;
+                            if(pos2==-1||pos2-7>temp.size()) {
+                                temp.clear();
+                                break;
+                            }
                             std::string ownmes=temp.substr(0,pos2-7);
                             std::cout<<ownmes<<std::endl;
                             temp.erase(0,pos2+5);
@@ -1484,7 +1487,11 @@ void chatclient::chat_with_friends(int client_fd,std::string request){
             allbuf.insert(0,headlenmes);
 
             std::string temp=allbuf;
-            Send(client_fd,allbuf.c_str(),allbuf.size(),0);
+            int n=Send(client_fd,allbuf.c_str(),allbuf.size(),0);
+            if(n<0){
+                send_chatting=false;
+                break;
+            }
             if(temp.substr(temp.find(' ')+1,4)=="STOR"||temp.substr(temp.find(' ')+1,4)=="RETR"){
                 std::string filemes;
                 if(temp.find("STOR ")!=std::string::npos){
@@ -1639,9 +1646,13 @@ int Send(int fd, const char *buf, int len, int flags)
     while (reallen < len){
         int temp = send(fd, buf + reallen, len - reallen, flags);
         if (temp < 0){
-            perror("send");
-            close(fd);
-            return reallen;
+            if(errno==EAGAIN||errno==EWOULDBLOCK){
+                break;
+            }else{
+                perror("send");
+                close(fd);
+                return reallen;
+            }
         }
         else if (temp == 0){
             // 数据已全部发送完毕
