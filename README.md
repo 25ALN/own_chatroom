@@ -53,7 +53,27 @@
 
 ## 编译与运行
 
+### 安装依赖
 ```bash
+- 安装 msmtp
+
+sudo apt update
+sudo apt install msmtp msmtp-mta mailutils
+
+- 配置 msmtp
+
+account default
+host smtp.qq.com
+port 465
+from 你的QQ邮箱@qq.com
+auth on
+user 你的QQ邮箱@qq.com
+password 你的授权码
+tls on
+tls_starttls off
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+
+启动方式
 1.进入chatroom目录；
 
 2.创建一个build文件夹；
@@ -61,11 +81,10 @@
 3.进入build文件夹执行 cmake ..
 
 4.然后make；
-
-启动方式
 进入bin目录，./chat_server，启动服务端  
 
 ./chat_client，启动客户端
 ```
 项目结构
-![alt text](image.png)
+![alt text](image-1.png)
+
