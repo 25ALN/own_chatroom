@@ -141,7 +141,7 @@ void chatclient::connect_init(){
 
 void chatclient::heart_work_thread(){
     const char heart_cmd=0x05; //表示一个字节的大小
-    const int heart_time=5;
+    const int heart_time=3;
     while(heart_if_running){
         if(Send(client_fd,&heart_cmd,1,0)<=0){
             perror("发送心跳失败");
@@ -150,6 +150,7 @@ void chatclient::heart_work_thread(){
         last_heart_time=time(nullptr);
         sleep(heart_time);
     }
+
     std::cout<<"发送心跳终止，连接断开"<<std::endl;
     close(client_fd);
     client_fd=-1;
@@ -192,7 +193,7 @@ void chatclient::caidan(){
             if(stopmark==0){
                 static std::mutex recv_lock;
                 std::unique_lock<std::mutex> x(recv_lock);
-                char buf[1000000];
+                char buf[3000000];
                 memset(buf,'\0',sizeof(buf));
                 int n=Recv(client_fd,buf,sizeof(buf),0);
                 if(n==-1){
@@ -240,7 +241,7 @@ void chatclient::caidan(){
                         client.reafy_return=1;
                     }
                
-                    if(temp.find(client.own_account)!=std::string::npos&&temp.find("0x01")!=std::string::npos&&temp.find("无法继续发送消息")!=std::string::npos){
+                    if(temp.find(client.own_account)!=std::string::npos&&temp.find("0x01")!=std::string::npos){
                         if(temp.find("无法继续发送")!=std::string::npos){
                             send_chatting=false;
                             client.if_getchat_account=0;
@@ -1010,7 +1011,10 @@ void chatclient::groups_chat(int client_fd,int choose){
         std::thread send_thread([&]{
             while(gsend_chat){
                 std::string message;
-                std::getline(std::cin,message);
+                char tempbuf[4096];
+                memset(tempbuf,'\0',sizeof(tempbuf));
+                std::cin.getline(tempbuf,sizeof(tempbuf));
+                message=tempbuf;
                 if(gsend_chat==false){
                     break;
                 }
@@ -1140,16 +1144,30 @@ void chatclient::owner_charger_right(int client_fd,int choose){
     }
     std::cout<<"        |      4.返回                 |      "<<std::endl;
     chose.clear();
-    std::getline(std::cin,chose);
-    int failtime=0;
-    while(chose.size()!=1||(chose!="1"&&chose!="2"&&chose!="3"&&chose!="4")){
-        if(failtime==3){
-            std::cout<<"输入错误次数过多请稍后重试！"<<std::endl;
-            return;
-        }
-        std::cout<<"输入格式有误，请重新输入:";
-        failtime++;
+    if(client.identify_pd==3){
         std::getline(std::cin,chose);
+        int failtime=0;
+        while(chose.size()!=1||(chose!="1"&&chose!="2"&&chose!="3"&&chose!="4")){
+            if(failtime==3){
+                std::cout<<"输入错误次数过多请稍后重试！"<<std::endl;
+                return;
+            }
+            std::cout<<"输入格式有误，请重新输入:";
+            failtime++;
+            std::getline(std::cin,chose);
+        }
+    }else{
+        std::getline(std::cin,chose);
+        int failtime=0;
+        while(chose.size()!=1||(chose!="1"&&chose!="4")){
+            if(failtime==3){
+                std::cout<<"输入错误次数过多请稍后重试！"<<std::endl;
+                return;
+            }
+            std::cout<<"输入格式有误，请重新输入:";
+            failtime++;
+            std::getline(std::cin,chose);
+        }
     }
     if(chose=="4"){
         client.identify_pd=0;
@@ -1474,13 +1492,14 @@ void chatclient::chat_with_friends(int client_fd,std::string request){
     }else{
         std::cout<<request<<std::endl;
     }
+
     std::thread send_thread([&]{
         while (send_chatting) {
             std::string allbuf;
-            if(!std::getline(std::cin,allbuf)){
-                std::cin.clear();
-                continue;
-            }
+            char tempbuf[4096];
+            memset(tempbuf,'\0',sizeof(tempbuf));
+            std::cin.getline(tempbuf,sizeof(tempbuf));
+            allbuf=tempbuf;
             if(allbuf.empty()) continue;  
             int len=allbuf.size();
             std::string headlenmes="head"+std::to_string(allbuf.size())+' ';
@@ -1488,6 +1507,7 @@ void chatclient::chat_with_friends(int client_fd,std::string request){
 
             std::string temp=allbuf;
             int n=Send(client_fd,allbuf.c_str(),allbuf.size(),0);
+
             if(n<0){
                 send_chatting=false;
                 break;
@@ -1515,14 +1535,13 @@ void chatclient::chat_with_friends(int client_fd,std::string request){
                 send_chatting=false;
                 break;
             }
-            allbuf.clear();
-            temp.clear();
         }
     });
 
     if(send_chatting==false){
         client.if_getchat_account=0;
         client.begin_chat_mark=0;
+        send_chatting=true;
         std::cout<<"私聊结束"<<std::endl;
     }
     if(send_thread.joinable()){
@@ -1576,12 +1595,7 @@ void chatclient::add_friends(int client_fd,std::string buf){
         std::getline(std::cin,account);
     }
     account+='\n';
-    int n=Send(client_fd,account.c_str(),account.size(),0);
-    if(n<=0){
-        perror("add send");
-        close(client_fd);
-        return;
-    }
+    Send(client_fd,account.c_str(),account.size(),0);
     while(!if_finshmes){
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }

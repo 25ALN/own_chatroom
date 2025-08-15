@@ -94,7 +94,7 @@ void chatserver::heart_check(){
         perror("setsockopt alive");
     }
     while(true){
-        sleep(20); //每10秒检查一次
+        sleep(10); //每10秒检查一次
         time_t now=time(nullptr);
         const time_t overtime=15; //超时时间s
         std::vector<int> to_remove;
@@ -203,7 +203,7 @@ void chatserver::connect_init(){
 
 void chatserver::deal_client_mes(int client_fd){
     
-    char buf[2000000];
+    char buf[3000000];
     memset(buf,'\0',sizeof(buf));
     auto &client=clientm[client_fd];
     int n=Recv(client_fd,buf,sizeof(buf),0);
@@ -214,18 +214,11 @@ void chatserver::deal_client_mes(int client_fd){
         Send(client_fd,&heart_cmd,1,0);
         return;
     }
-    if(n<0){
-        if(errno==EAGAIN||errno==EWOULDBLOCK){
-            return;
-        }else{
-            close(client_fd);
-            clientm.erase(client_fd);
-        }
-        return;
-    }
-    std::string temp(buf,n);
+    std::string temp;
+    
+    temp+=(std::string)buf;
     for(int i=0;i<temp.size();i++){
-        if(temp[i]==0x05){
+        if(static_cast<int>(temp[i])==5){
             temp.erase(i,1);
         }
     }    
@@ -234,7 +227,9 @@ void chatserver::deal_client_mes(int client_fd){
         return;
     }
     if(temp.size()>0){
-        if(temp.find("head")!=std::string::npos&&temp.find("ghead")==std::string::npos){
+        if(temp.find("head")!=std::string::npos&&temp.find("$?")==std::string::npos){
+            int pos=temp.find("head");
+            temp.erase(0,pos);
             std::mutex recv_lcok;
             std::unique_lock<std::mutex> buffer_lock(recv_lcok);
             while(temp.size()!=0){
@@ -908,6 +903,7 @@ void chatserver::deal_friends_part(int client_fd,std::string data){
     }
     if(x.if_enter_group==1){
         groups(client_fd);
+        return;
     }
     pool.queuetasks([this,client_fd,x,data,acout]{
     switch (choose[0]){
@@ -1339,7 +1335,7 @@ void chatserver::groups_chat(int client_fd){
         {
             std::unique_lock<std::mutex> saveLock(savemeslock);
             redisReply *greply=(redisReply *)redisCommand(conn,"EXISTS %s",g_key.c_str());
-            if(greply->integer!=1){
+            if(greply&&greply->type==REDIS_REPLY_INTEGER&&greply->integer!=1){
                 tempmes="该群已被解散，不允许继续发送消息";
                 client.if_begin_group_chat=0;
                 client.group_message.clear();
@@ -2110,7 +2106,6 @@ void chatserver::ingore_someone(int client_fd,std::string account){
 void chatserver::chat_with_friends(int client_fd,std::string account,std::string data){
     auto &client=clientm[client_fd];
     client.chat_with=account;
-    std::cout<<"client account="<<client.cur_user<<std::endl;
     std::string key="user:"+account;
     std::string response;
     if(client.if_begin_chat==0){
@@ -2208,10 +2203,7 @@ void chatserver::chat_with_friends(int client_fd,std::string account,std::string
                     recv_buffer.clear();
                     std::string delmes=willsendmes+" ("+client.cur_user+")0x01";
                     if(client.if_begin_chat==1){
-                        int n=Send(client_fd,delmes.c_str(),delmes.size(),0);
-                        if(n<0){
-                            std::cout<<"message="<<delmes<<std::endl;
-                        }
+                        Send(client_fd,delmes.c_str(),delmes.size(),0);
                     }
                     client.if_begin_chat=0;
                 }
@@ -2222,8 +2214,8 @@ void chatserver::chat_with_friends(int client_fd,std::string account,std::string
                 if(if_enter_chat==0){
                     willsendmes=own_name+"用户向你发送了一条私聊消息";
                 }
-                n=Send(chat_people,willsendmes.c_str(),willsendmes.size(),0);
-                std::cout<<"chat n="<<n<<std::endl;
+                int tempn=Send(chat_people,willsendmes.c_str(),willsendmes.size(),0);
+                std::cout<<"chat n="<<tempn<<std::endl;
             }
             if(chat_people==-1||(n>0&&data.find("/exit")==std::string::npos)){
                 long long key_num=std::stoll(account)+std::stoll(client.cur_user);
@@ -2339,10 +2331,14 @@ void chatserver::delete_friends(int client_fd,std::string account){
 }
 
 std::string chatserver::deal_add_friends(int client_fd,std::string account){
+    
     if (!account.empty()&&account.back()=='\n') {
         account.erase(account.size()-1);
     }
     auto &client=clientm[client_fd];
+    std::cout<<"enter add friends"<<std::endl;
+    std::cout<<"user:"<<client.cur_user<<std::endl;
+    std::cout<<"account="<<account<<std::endl;
     // 检查是否添加自己
     if(client.cur_user==account){
         std::string temp="不能添加自己为好友!";
@@ -2352,10 +2348,10 @@ std::string chatserver::deal_add_friends(int client_fd,std::string account){
     // 检查账号是否存在
     std::string userKey="user:"+account;
     redisReply *reply=(redisReply *)redisCommand(conn,"EXISTS %s",userKey.c_str());
-    if (!reply||reply->integer==0){
+    if (reply->integer!=1){
         std::string temp="该账号不存在！";
         Send(client_fd,temp.c_str(),temp.size(),0);
-        if (reply) freeReplyObject(reply);
+        freeReplyObject(reply);
         return "0";
     }
     freeReplyObject(reply);
@@ -2365,7 +2361,6 @@ std::string chatserver::deal_add_friends(int client_fd,std::string account){
     reply=(redisReply*)redisCommand(conn,"SISMEMBER %s %s",friendsKey.c_str(), account.c_str());
     if (reply->integer==1){
         std::string temp="你们已经是好友了！";
-        //temp+=0x07;
         Send(client_fd,temp.c_str(),temp.size(), 0);
         freeReplyObject(reply);
         return "0";
@@ -2381,7 +2376,7 @@ std::string chatserver::deal_add_friends(int client_fd,std::string account){
         freeReplyObject(pbcz);
         return "0";
     }
-
+    freeReplyObject(pbcz);
     // 查找目标用户是否在线
     bool found=false;
     for(auto& [fd, cli]:clientm) {
