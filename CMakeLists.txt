@@ -1,38 +1,3 @@
-# cmake_minimum_required(VERSION 2.8)
-# project(testwjj)
-
-# SET(CMAKE_BUILD_TYPE Release)
-
-# find_package(PkgConfig REQUIRED)  
-# pkg_search_module(HIREDIS REQUIRED hiredis)
-
-# set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
-# set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
-
-# include_directories(
-# ${PROJECT_SOURCE_DIR}/include
-# ${HIREDIS_INCLUDE_DIRS}
-# )
-
-# file(GLOB SERVER_SRC
-#     src/server/*.cpp
-#     src/common/*.cpp
-# )
-
-# file(GLOB CLIENT_SRC
-#     src/client/*.cpp
-#     src/common/*.cpp
-# )
-
-# add_executable(chat_server ${SERVER_SRC})
-# add_executable(chat_client ${CLIENT_SRC})
-
-# find_package(Threads REQUIRED)
-
-# target_link_libraries(chat_server PRIVATE Threads::Threads
-# ${HIREDIS_LIBRARIES})
-# target_link_libraries(chat_client PRIVATE Threads::Threads)
-
 cmake_minimum_required(VERSION 2.8)
 project(testwjj)
 
@@ -59,7 +24,7 @@ file(GLOB SERVER_SRC
 
 file(GLOB CLIENT_SRC
     ${PROJECT_SOURCE_DIR}/src/client/*.cpp
-    ${PROJECT_SOURCE_DIR}/src/common/*.cpp
+    ${PROJECT_SOURCE_DIR}/src/ccommon/*.cpp
 )
 
 # 生成可执行文件

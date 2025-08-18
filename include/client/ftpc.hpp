@@ -1,3 +1,7 @@
+#ifndef FTPC_HPP
+#define FTPC_HPP
+
+
 #include "../ftpcli.hpp"
 
 int fcRecv(int fd,char *buf,int len,int flags);
@@ -25,3 +29,5 @@ class ftpclient{
     void deal_get_file(std::string filename,int fd);
     void deal_up_file(std::string filename,int fd);
 };
+
+#endif

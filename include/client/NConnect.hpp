@@ -1,22 +1,20 @@
-#ifndef CLI_HPP
-#define CLI_HPP
+#ifndef NCONNECT_HPP
+#define NCONNECT_HPP
 
-#include "Friends.hpp"
-#include "NConnect.hpp"
-#include "Groups.hpp"
-#include "ftpc.hpp"
+#include "../ccommon.hpp"
 
-class chatclient{
+class Netconnect{
     public:
-    chatclient(const std::string &tempip,int tempport);
-    void start();
-    ~chatclient();
+    Netconnect(std::unordered_map<int, cclientmessage>& clients, 
+             const std::string& ip, int port);
+    void connect_init();
+    void caidan();
+    void deal_login_mu(char *a);
+    void find_password(std::string chose);
+    void heart_check();
+    void heart_work_thread();
+    
     private:
-
-    Netconnect init;
-    Friends f;
-    Groupsm manage;
-
     bool if_login=false;
     bool if_finshmes=false;
     //心
@@ -26,11 +24,12 @@ class chatclient{
 
     int client_fd;
     std::unordered_map<int,cclientmessage> clientmes;
-    
+
     std::set<std::string> recv_message;  
     std::string client_ip;
     int client_port;
     std::atomic<bool>mesmark=false;
 };
+
 
 #endif
